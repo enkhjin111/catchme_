@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+    <style>
+    
+        body {
+            background-color: black;
+            background: url('back.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            overflow: hidden;
+            margin: 0;
+            position: relative;
+            height: 100vh;
+            width: 100vw;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #game-container, #step3-button {
+            display: none;
+        }
+        #explanation {
+            font-size: 24px;
+            white-space: pre-wrap;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-family: 'Silkscreen', cursive; /* Apply the Silkscreen font */
+        }
+        #start-button {
+            width: 200px;
+            height: 100px;
+            background: url('17.png') no-repeat center center;
+            background-size: cover;
+            position: absolute;
+            top: 85%;
+            left: 50%;
+            transform: translateX(-50%);
+            cursor: pointer;
+            z-index: 100;
+        }
+        #rect {
+            width: 70px;
+            height: 70px;
+            background: url('1.png') no-repeat center center;
+            background-size: cover;
+            position: absolute;
+            z-index: 99;
+        }
+        .mon {
+            width: 70px;
+            height: 70px;
+            background: url('2.png') no-repeat center center;
+            background-size: cover;
+            position: absolute;
+        }
+        .obstacle {
+            width: 70px;
+            height: 70px;
+            background: url('33333.png') no-repeat center center;
+            background-size: cover;
+            position: absolute;
+            z-index: 50;
+        }
+        .treasure {
+            width: 70px;
+            height: 70px;
+            background: url('9.png') no-repeat center center;
+            background-size: cover;
+            position: absolute;
+            z-index: 60;
+        }
+        #timer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            z-index: 100;
+        }
+        #step3-button {
+            width: 200px;
+            height: 100px;
+            background: url('15.png') no-repeat center center;
+            background-size: cover;
+            position: absolute;
+            top: 70%;
+            left: 50%;
+            transform: translateX(-50%);
+            cursor: pointer;
+            z-index: 100;
+        }
+    
+    </style>
+</head>
+<body>
+    <audio id="background-music" src="sound.wav" loop hidden></audio>
+    <audio id="move-sound" src="move.wav"></audio>
+    <div id="explanation"></div>
+    <div id="start-button" style="display: block;"></div>
+    <div id="game-container">
+        <div id="rect" style="left: 0px; top: 0px;"></div>
+        <div id="timer"></div>
+    </div>
+    <div id="step3-button"></div>
+
+    <script type="text/javascript">
+        
+        
+        const explanationText = "Welcome to the Maze Game!\n" +
+                                "Collect all the treasures within 30 seconds.\n" +
+                                "Avoid the monsters and obstacles.\n" +
+                                "Press Start to begin!";
+        const explanationElement = document.getElementById('explanation');
+        const startButton = document.getElementById('start-button');
+        const gameContainer = document.getElementById('game-container');
+        const step3Button = document.getElementById('step3-button');
+        const timerElement = document.getElementById('timer');
+        const moveSound = document.getElementById('move-sound');
+        const backgroundMusic = document.getElementById('background-music');
+        let timer = 30;
+        let treasures = [];
+        let interval;
+
+        let index = 0;
+        function typeEffect() {
+            if (index < explanationText.length) {
+                explanationElement.innerHTML += explanationText.charAt(index);
+                index++;
+                setTimeout(typeEffect, 50);
+            } else {
+                startButton.style.display = 'block';
+            }
+        }
+        typeEffect();
+
+        const cellSize = 70;
+        const rows = Math.floor(window.innerHeight / cellSize);
+        const cols = Math.floor(window.innerWidth / cellSize);
+        let xplot = 0, yplot = 0;
+        const rect = document.getElementById('rect');
+        rect.style.left = xplot + "px";
+        rect.style.top = yplot + "px";
+        const monsters = [];
+
+        const mazeLayout = Array.from({ length: rows }, () =>
+            Array.from({ length: cols }, () => Math.random() < 0.2 ? 1 : 0)
+        );
+
+        startButton.onclick = function() {
+    startButton.remove(); // Remove the start button from the DOM
+    explanationElement.style.display = 'none';
+    gameContainer.style.display = 'block';
+    
+    // Remove the background image
+    document.body.style.backgroundImage = 'none'; // Change this line
+    document.body.style.backgroundColor = 'black';
+
+    backgroundMusic.play().catch(() => {
+        console.log("Autoplay was prevented. Background music will play only after user interaction.");
+    });
+    initializeGame();
+};
+
+
+
+
+        function initializeGame() {
+            createMaze();
+            for (let i = 0; i < 3; i++) createMon(i);
+            for (let i = 0; i < 3; i++) createTreasure();
+            startTimer();
+            monsterChase();
+        }
+
+        function createMaze() {
+    const safeZone = 2; // Define a safe zone radius
+    const safeXMin = Math.max(0, (xplot / cellSize) - safeZone);
+    const safeXMax = Math.min(cols - 1, (xplot / cellSize) + safeZone);
+    const safeYMin = Math.max(0, (yplot / cellSize) - safeZone);
+    const safeYMax = Math.min(rows - 1, (yplot / cellSize) + safeZone);
+
+    for (let i = 0; i < mazeLayout.length; i++) {
+        for (let j = 0; j < mazeLayout[i].length; j++) {
+            // Check if the current position is within the safe zone
+            if (
+                i >= safeYMin && i <= safeYMax &&
+                j >= safeXMin && j <= safeXMax
+            ) {
+                continue; // Skip this position for obstacle placement
+            }
+
+            if (mazeLayout[i][j] === 1) {
+                let obstacle = document.createElement("div");
+                obstacle.className = "obstacle";
+                obstacle.style.left = j * cellSize + "px";
+                obstacle.style.top = i * cellSize + "px";
+                gameContainer.appendChild(obstacle);
+            }
+        }
+    }
+}
+
+
+        function createMon(index) {
+            let monster = document.createElement("div");
+            monster.className = "mon";
+            let monX, monY;
+            do {
+                monX = Math.floor(Math.random() * cols) * cellSize;
+                monY = Math.floor(Math.random() * rows) * cellSize;
+            } while (mazeLayout[monY / cellSize][monX / cellSize] === 1);
+
+            monster.style.left = monX + "px";
+            monster.style.top = monY + "px";
+            gameContainer.appendChild(monster);
+            monsters.push(monster);
+        }
+
+        function createTreasure() {
+            let treasure = document.createElement("div");
+            treasure.className = "treasure";
+
+            const treasureImages = ['9.png', '99.png', '999.png', '9999.png'];
+            const randomImage = treasureImages[Math.floor(Math.random() * treasureImages.length)];
+            treasure.style.backgroundImage = `url('${randomImage}')`;
+
+            let treasureX, treasureY;
+            do {
+                treasureX = Math.floor(Math.random() * cols) * cellSize;
+                treasureY = Math.floor(Math.random() * rows) * cellSize;
+            } while (mazeLayout[treasureY / cellSize][treasureX / cellSize] === 1);
+
+            treasure.style.left = treasureX + "px";
+            treasure.style.top = treasureY + "px";
+            gameContainer.appendChild(treasure);
+            treasures.push(treasure);
+        }
+
+        function startTimer() {
+            timerElement.innerHTML = "Time: " + timer + "s";
+            interval = setInterval(() => {
+                timer--;
+                timerElement.innerHTML = "Time: " + timer + "s";
+                if (timer <= 0) {
+                    clearInterval(interval);
+                    alert("Time's up! Game Over!");
+                    document.location.reload();
+                }
+            }, 1000);
+        }
+
+        window.onkeydown = function(e) {
+            if (gameContainer.style.display === 'none') return;
+            let newXplot = xplot, newYplot = yplot;
+            if (e.keyCode === 37) newXplot = Math.max(0, xplot - cellSize);
+            else if (e.keyCode === 39) newXplot = Math.min(innerWidth - cellSize, xplot + cellSize);
+            else if (e.keyCode === 38) newYplot = Math.max(0, yplot - cellSize);
+            else if (e.keyCode === 40) newYplot = Math.min(innerHeight - cellSize, yplot + cellSize);
+
+            const obstacles = document.getElementsByClassName("obstacle");
+            for (let obstacle of obstacles) {
+                let obsRect = obstacle.getBoundingClientRect();
+                let playerRect = rect.getBoundingClientRect();
+                playerRect.left = newXplot;
+                playerRect.top = newYplot;
+
+                if (
+                    playerRect.left < obsRect.right &&
+                    playerRect.right > obsRect.left &&
+                    playerRect.top < obsRect.bottom &&
+                    playerRect.bottom > obsRect.top
+                ) {
+                    alert("You hit an obstacle! Game Over!");
+                    document.location.reload();
+                    return;
+                }
+            }
+
+            xplot = newXplot;
+            yplot = newYplot;
+            rect.style.left = xplot + "px";
+            rect.style.top = yplot + "px";
+
+            checkTreasureCollision();
+        };
+
+        function checkTreasureCollision() {
+            for (let i = 0; i < treasures.length; i++) {
+                let treasureRect = treasures[i].getBoundingClientRect();
+                let playerRect = rect.getBoundingClientRect();
+
+                if (
+                    playerRect.left < treasureRect.right &&
+                    playerRect.right > treasureRect.left &&
+                    playerRect.top < treasureRect.bottom &&
+                    playerRect.bottom > treasureRect.top
+                ) {
+                    treasures[i].remove();
+                    treasures.splice(i, 1);
+
+                    if (treasures.length === 0) {
+                        clearInterval(interval);
+                        step3Button.style.display = 'block';
+                    }
+                    break;
+                }
+            }
+        }
+
+        function monsterChase() {
+            setInterval(() => {
+                monsters.forEach(monster => {
+                    let monX = parseInt(monster.style.left);
+                    let monY = parseInt(monster.style.top);
+                    let dx = xplot - monX;
+                    let dy = yplot - monY;
+
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 300) {
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            monster.style.left = Math.max(0, Math.min(innerWidth - cellSize, monX + (dx > 0 ? cellSize : -cellSize))) + "px";
+                        } else {
+                            monster.style.top = Math.max(0, Math.min(innerHeight - cellSize, monY + (dy > 0 ? cellSize : -cellSize))) + "px";
+                        }
+                    } else {
+                        let randomDirection = Math.floor(Math.random() * 4);
+                        if (randomDirection === 0) {
+                            monster.style.left = Math.max(0, monX - cellSize) + "px";
+                        } else if (randomDirection === 1) {
+                            monster.style.left = Math.min(innerWidth - cellSize, monX + cellSize) + "px";
+                        } else if (randomDirection === 2) {
+                            monster.style.top = Math.max(0, monY - cellSize) + "px";
+                        } else {
+                            monster.style.top = Math.min(innerHeight - cellSize, monY + cellSize) + "px";
+                        }
+                    }
+
+                    if (checkMonsterCollision(monster)) {
+                        alert("😭 A monster caught you! Game Over! 😭");
+                        document.location.reload();
+                    }
+                });
+            }, 1000);
+        }
+
+        function checkMonsterCollision(monster) {
+            let monsterRect = monster.getBoundingClientRect();
+            let playerRect = rect.getBoundingClientRect();
+
+            return (
+                playerRect.left < monsterRect.right &&
+                playerRect.right > monsterRect.left &&
+                playerRect.top < monsterRect.bottom &&
+                playerRect.bottom > monsterRect.top
+            );
+        }
+
+       step3Button.onclick = function() {
+  alert("Congratulations! You have cleared the game. Click the green button for harder round");
+
+  // Reset the maze and player position
+  gameContainer.innerHTML = "";
+  xplot = 0;
+  yplot = 0;
+  rect.style.left = xplot + "px";
+  rect.style.top = yplot + "px";
+  gameContainer.appendChild(rect);
+
+  // Increase difficulty (adjust as needed)
+  mazeComplexity = 0.3;
+  monsterSpeed = 800;
+
+  // Hide the Step 3 button
+  step3Button.style.display = 'none';
+
+  initializeGame();
+};
+    
+    
+    </script>
+</body>
+</html>
